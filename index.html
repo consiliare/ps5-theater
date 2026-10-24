@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theater Launcher</title>
+<style>
+  :root {
+    --bg: #0b0f1a;
+    --panel: #151b2b;
+    --panel-2: #1d2539;
+    --text: #eef2ff;
+    --muted: #9aa4bf;
+    --accent: #4f8cff;
+    --accent-text: #ffffff;
+    --danger: #ff6b6b;
+    --focus: #ffd34d;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 22px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  button {
+    background: var(--panel-2);
+    border: 2px solid transparent;
+    border-radius: 12px;
+    padding: 14px 22px;
+    cursor: pointer;
+  }
+  button:hover, button:focus-visible, input:focus-visible {
+    outline: none;
+    border-color: var(--focus);
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+  /* ---------- Launcher ---------- */
+  #launcher { max-width: 1100px; margin: 0 auto; padding: 40px 16px 60px; }
+  h1 { font-size: 40px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  form { display: flex; gap: 12px; flex-wrap: wrap; }
+  #url {
+    flex: 1 1 420px;
+    min-width: 0;
+    background: var(--panel);
+    border: 2px solid var(--panel-2);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+  #msg { min-height: 1.4em; margin: 12px 0 0; color: var(--danger); }
+  section { margin-top: 36px; }
+  h2 { font-size: 26px; margin: 0 0 14px; color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+  .tile {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    text-align: left; background: var(--panel); padding: 18px; min-height: 96px;
+    position: relative; overflow: hidden;
+  }
+  .tile .name { font-weight: 600; word-break: break-word; }
+  .tile .kind { color: var(--muted); font-size: 17px; }
+  .tile .del {
+    position: absolute; top: 8px; right: 8px; padding: 4px 12px;
+    font-size: 18px; background: transparent; color: var(--muted);
+  }
+  .empty { color: var(--muted); }
+  .help { color: var(--muted); font-size: 18px; }
+  .help li { margin: 4px 0; }
+
+  /* ---------- Player ---------- */
+  #player { position: fixed; inset: 0; background: #000; overflow: hidden; display: none; }
+  body.playing #player { display: block; }
+  body.playing #launcher { display: none; }
+  #stage { position: absolute; inset: 0; transform-origin: center center; }
+  #stage iframe, #stage video { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  #bar {
+    position: absolute; top: 12px; left: 12px; display: flex; gap: 10px;
+    opacity: 0.3; transition: opacity .2s;
+  }
+  #bar:hover, #bar:focus-within, body.show-bar #bar { opacity: 1; }
+  #bar button { background: rgba(20, 24, 36, 0.85); padding: 10px 18px; font-size: 20px; }
+  body.bar-hidden #bar { display: none; }
+  #peek {
+    display: none; position: absolute; top: 0; left: 0; width: 56px; height: 56px;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
+  }
+  body.bar-hidden #peek { display: block; }
+</style>
+</head>
+<body>
+
+<main id="launcher">
+  <h1>Theater Launcher</h1>
+  <p class="sub">Paste a video link and it plays filling the whole screen.</p>
+
+  <form id="form">
+    <input id="url" type="text" inputmode="url" autocomplete="off" spellcheck="false"
+           placeholder="youtube.com/watch?v=…  ·  twitch.tv/channel  ·  vimeo.com/…">
+    <button class="primary" type="submit">Play</button>
+  </form>
+  <div class="row">
+    <button type="button" id="save">Save to shortcuts</button>
+    <button type="button" id="clear">Clear</button>
+  </div>
+  <p id="msg" role="status"></p>
+
+  <section>
+    <h2>Shortcuts</h2>
+    <div class="grid" id="saved"></div>
+  </section>
+
+  <section>
+    <h2>Recent</h2>
+    <div class="grid" id="recent"></div>
+  </section>
+
+  <section>
+    <h2>Tips</h2>
+    <ul class="help">
+      <li>Works with YouTube (videos, live, shorts, playlists), Twitch, Vimeo, Dailymotion, Kick, and direct .mp4 / .m3u8 links.</li>
+      <li>Other web pages open full-window too, but some sites refuse to load inside another page.</li>
+      <li>While playing, the faint buttons in the top-left corner go back or zoom. <b>Zoom</b> crops black bars.</li>
+      <li>Press Circle (browser back) to return here.</li>
+    </ul>
+  </section>
+</main>
+
+<div id="player">
+  <div id="stage"></div>
+  <div id="bar">
+    <button type="button" id="back">◀ Back</button>
+    <button type="button" id="zoom">Zoom: Fit</button>
+    <button type="button" id="hide">Hide buttons</button>
+  </div>
+  <button type="button" id="peek" aria-label="Show buttons"></button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.13/hls.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const host = location.hostname || 'localhost';
+
+  // ---------- storage (best effort; the page works without it) ----------
+  const store = {
+    get(key) {
+      try { return JSON.parse(localStorage.getItem(key)) || []; } catch { return []; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+    },
+  };
+
+  // ---------- link -> player ----------
+  function parseTime(t) {
+    if (!t) return 0;
+    if (/^\d+$/.test(t)) return +t;
+    const m = t.match(/(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?/);
+    return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0;
+  }
+
+  function resolve(raw) {
+    let s = (raw || '').trim();
+    if (!s) return null;
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    let u;
+    try { u = new URL(s); } catch { return null; }
+    const h = u.hostname.replace(/^(www|m|music)\./, '');
+    const path = u.pathname;
+
+    // YouTube
+    if (h === 'youtu.be' || h === 'youtube.com' || h === 'youtube-nocookie.com') {
+      let id = h === 'youtu.be' ? path.slice(1).split('/')[0] : null;
+      const m = path.match(/^\/(?:shorts|live|embed)\/([\w-]{11})/);
+      if (m) id = m[1];
+      if (!id) id = u.searchParams.get('v');
+      const list = u.searchParams.get('list');
+      const start = parseTime(u.searchParams.get('t') || u.searchParams.get('start'));
+      const q = new URLSearchParams({ autoplay: '1', playsinline: '1', rel: '0' });
+      if (start) q.set('start', start);
+      if (id) {
+        if (list) q.set('list', list);
+        return { kind: 'YouTube', src: `https://www.youtube.com/embed/${id}?${q}` };
+      }
+      if (list) {
+        q.set('list', list);
+        return { kind: 'YouTube playlist', src: `https://www.youtube.com/embed/videoseries?${q}` };
+      }
+    }
+
+    // Twitch
+    if (h === 'clips.twitch.tv') {
+      const slug = path.slice(1).split('/')[0];
+      if (slug) return { kind: 'Twitch clip', src: `https://clips.twitch.tv/embed?clip=${slug}&parent=${host}&autoplay=true` };
+    }
+    if (h === 'twitch.tv') {
+      const parts = path.split('/').filter(Boolean);
+      if (parts[0] === 'videos' && parts[1]) {
+        return { kind: 'Twitch video', src: `https://player.twitch.tv/?video=v${parts[1]}&parent=${host}&autoplay=true` };
+      }
+      if (parts[1] === 'clip' && parts[2]) {
+        return { kind: 'Twitch clip', src: `https://clips.twitch.tv/embed?clip=${parts[2]}&parent=${host}&autoplay=true` };
+      }
+      if (parts[0]) {
+        return { kind: 'Twitch live', src: `https://player.twitch.tv/?channel=${parts[0]}&parent=${host}&autoplay=true` };
+      }
+    }
+
+    // Vimeo
+    if (h === 'vimeo.com' || h === 'player.vimeo.com') {
+      const m = path.match(/(\d{5,})/);
+      if (m) return { kind: 'Vimeo', src: `https://player.vimeo.com/video/${m[1]}?autoplay=1` };
+    }
+
+    // Dailymotion
+    if (h === 'dailymotion.com' || h === 'dai.ly') {
+      const m = h === 'dai.ly' ? path.match(/^\/(\w+)/) : path.match(/\/video\/(\w+)/);
+      if (m) return { kind: 'Dailymotion', src: `https://www.dailymotion.com/embed/video/${m[1]}?autoplay=1` };
+    }
+
+    // Kick
+    if (h === 'kick.com') {
+      const chan = path.split('/').filter(Boolean)[0];
+      if (chan) return { kind: 'Kick live', src: `https://player.kick.com/${chan}` };
+    }
+
+    // Direct video files
+    if (/\.m3u8$/i.test(path)) return { kind: 'HLS stream', video: u.href, hls: true };
+    if (/\.(mp4|webm|mov|m4v)$/i.test(path)) return { kind: 'Video file', video: u.href };
+
+    return { kind: 'Web page', src: u.href };
+  }
+
+  // ---------- player ----------
+  const zooms = [
+    { label: 'Fit', scale: 1 },
+    { label: 'Fill 115%', scale: 1.15 },
+    { label: 'Fill 133%', scale: 1.33 },
+  ];
+  let zoomIndex = 0;
+  let hlsInstance = null;
+
+  function applyZoom() {
+    const z = zooms[zoomIndex];
+    $('stage').style.transform = `scale(${z.scale})`;
+    $('zoom').textContent = `Zoom: ${z.label}`;
+  }
+
+  function mount(target) {
+    const stage = $('stage');
+    stopPlayback();
+    if (target.video) {
+      const v = document.createElement('video');
+      v.controls = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      if (target.hls && !v.canPlayType('application/vnd.apple.mpegurl') && window.Hls && Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(target.video);
+        hlsInstance.attachMedia(v);
+      } else {
+        v.src = target.video;
+      }
+      stage.appendChild(v);
+    } else {
+      const f = document.createElement('iframe');
+      f.src = target.src;
+      f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+      f.allowFullscreen = true;
+      f.referrerPolicy = 'strict-origin-when-cross-origin';
+      stage.appendChild(f);
+    }
+    applyZoom();
+    document.body.classList.add('playing');
+    document.body.classList.remove('bar-hidden');
+    flashBar();
+  }
+
+  function stopPlayback() {
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    $('stage').innerHTML = '';
+    document.body.classList.remove('playing');
+  }
+
+  let barTimer;
+  function flashBar() {
+    document.body.classList.add('show-bar');
+    clearTimeout(barTimer);
+    barTimer = setTimeout(() => document.body.classList.remove('show-bar'), 3000);
+  }
+
+  // ---------- routing: #v=<link> plays, empty hash shows launcher ----------
+  function currentLink() {
+    const m = location.hash.match(/^#v=(.+)$/);
+    if (!m) return null;
+    try { return decodeURIComponent(m[1]); } catch { return null; }
+  }
+
+  function route() {
+    const link = currentLink();
+    if (!link) { stopPlayback(); return; }
+    const target = resolve(link);
+    if (!target) { stopPlayback(); showMsg('That doesn’t look like a link.'); return; }
+    remember(link, target.kind);
+    mount(target);
+  }
+
+  function play(link) {
+    const target = resolve(link);
+    if (!target) { showMsg('That doesn’t look like a link.'); return; }
+    showMsg('');
+    location.hash = 'v=' + encodeURIComponent(link.trim());
+  }
+
+  // ---------- lists ----------
+  function label(link) {
+    try {
+      const u = new URL(/^https?:\/\//i.test(link) ? link : 'https://' + link);
+      return (u.hostname.replace(/^www\./, '') + u.pathname).replace(/\/$/, '');
+    } catch { return link; }
+  }
+
+  function remember(link, kind) {
+    const recent = store.get('recent').filter((r) => r.url !== link);
+    recent.unshift({ url: link, kind });
+    store.set('recent', recent.slice(0, 8));
+  }
+
+  function renderList(key, el, deletable) {
+    const items = store.get(key);
+    el.innerHTML = '';
+    if (!items.length) {
+      el.innerHTML = `<p class="empty">${key === 'saved' ? 'Nothing saved yet.' : 'Nothing played yet.'}</p>`;
+      return;
+    }
+    items.forEach((item, i) => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'tile';
+      tile.innerHTML = '<span class="name"></span><span class="kind"></span>';
+      tile.querySelector('.name').textContent = item.name || label(item.url);
+      tile.querySelector('.kind').textContent = item.kind || '';
+      tile.addEventListener('click', () => play(item.url));
+      if (deletable) {
+        const del = document.createElement('span');
+        del.className = 'del';
+        del.setAttribute('role', 'button');
+        del.textContent = '✕';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const next = store.get(key);
+          next.splice(i, 1);
+          store.set(key, next);
+          renderLists();
+        });
+        tile.appendChild(del);
+      }
+      el.appendChild(tile);
+    });
+  }
+
+  function renderLists() {
+    renderList('saved', $('saved'), true);
+    renderList('recent', $('recent'), false);
+  }
+
+  function showMsg(text) { $('msg').textContent = text; }
+
+  // ---------- wiring ----------
+  $('form').addEventListener('submit', (e) => { e.preventDefault(); play($('url').value); });
+  $('clear').addEventListener('click', () => { $('url').value = ''; showMsg(''); $('url').focus(); });
+  $('save').addEventListener('click', () => {
+    const link = $('url').value.trim();
+    const target = resolve(link);
+    if (!target) { showMsg('Paste a link first.'); return; }
+    const saved = store.get('saved').filter((s) => s.url !== link);
+    saved.unshift({ url: link, kind: target.kind });
+    store.set('saved', saved);
+    showMsg('');
+    renderLists();
+  });
+
+  $('back').addEventListener('click', () => {
+    if (history.length > 1) history.back();
+    else location.hash = '';
+  });
+  $('zoom').addEventListener('click', () => { zoomIndex = (zoomIndex + 1) % zooms.length; applyZoom(); flashBar(); });
+  $('hide').addEventListener('click', () => document.body.classList.add('bar-hidden'));
+  $('peek').addEventListener('click', () => { document.body.classList.remove('bar-hidden'); flashBar(); });
+  document.addEventListener('keydown', (e) => {
+    if (!document.body.classList.contains('playing')) return;
+    if (e.key === 'Escape') { location.hash = ''; return; }
+    document.body.classList.remove('bar-hidden');
+    flashBar();
+  });
+
+  window.addEventListener('hashchange', () => { route(); renderLists(); });
+  renderLists();
+  route();
+})();
+</script>
+</body>
+</html>
